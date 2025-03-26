@@ -31,18 +31,33 @@ const send_msg_list = [
     "我觉得你身上有种难以抗拒的魅力。",
     "你让我相信，爱情真的存在。",
     "如果可以，我愿意和你一起走遍每一个地方。",
-]
+];
+
+const favorite_list = [
+    "深圳腾讯滨海大厦",
+    "邀请好友一起喝",
+    "生活苦？"
+];
+
 const sender_name_list = [
-    "何毅彬",
-    "听桥"
-]
+    "小丑",
+    "听桥",
+    "youngo"
+];
+
 interface WsRecvMsg {
     sender: string;
     content: string;
 }
+
 interface WsSendMsg {
     receiver: string;
     content: string;
+}
+
+interface WsFavoriteMsg {
+    favorite_name: string;
+    friend_name: string;
 }
 
 // 获取随机消息
@@ -51,10 +66,21 @@ function getRandomMessage() {
     return send_msg_list[randomIndex];
 }
 
+// 获取随机收藏
+function getRandomFavorite() {
+    const randomIndex = Math.floor(Math.random() * favorite_list.length);
+    return favorite_list[randomIndex];
+}
+
 // 获取随机发送者
 function getRandomSender() {
     const randomIndex = Math.floor(Math.random() * sender_name_list.length);
     return sender_name_list[randomIndex];
+}
+
+// 随机选择消息类型
+function getRandomMessageType(): 'text' | 'favorite' {
+    return Math.random() < 0.5 ? 'text' : 'favorite';
 }
 
 function connectWebSocket() {
@@ -96,16 +122,26 @@ connectWebSocket();
 // 发送消息函数
 function sendMessage() {
     if (ws.readyState === WebSocket.OPEN) {
-        const content = getRandomMessage();
         const sender = getRandomSender();
+        const messageType = getRandomMessageType();
         
-        ws.send(JSON.stringify({
-            type: "send",
-            receiver:sender,
-            content
-        }));
-        
-        console.log(`发送消息: ${sender} -> ${content}`);
+        if (messageType === 'text') {
+            const content = getRandomMessage();
+            ws.send(JSON.stringify({
+                type: "send_text",
+                receiver: sender,
+                content
+            }));
+            console.log(`发送文本消息: ${content} -> ${sender}`);
+        } else {
+            const favoriteName = getRandomFavorite();
+            ws.send(JSON.stringify({
+                type: "send_favorite",
+                favorite_name: favoriteName,
+                friend_name: sender
+            }));
+            console.log(`发送收藏内容: ${favoriteName} -> ${sender}`);
+        }
     } else {
         console.log("WebSocket未连接，消息未发送");
     }

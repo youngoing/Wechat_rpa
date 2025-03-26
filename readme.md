@@ -1,3 +1,15 @@
+# 微信RPA自动化工具
+
+基于Python的微信PC客户端自动化工具，支持消息收发、收藏转发等功能。
+
+## 功能特性
+
+- 自动收发微信消息
+- 新好友自动欢迎
+- 收藏内容转发
+- WebSocket实时通信
+- 消息去重处理
+- 异常自动重试
 
 ## 快速开始
 
@@ -18,12 +30,21 @@ const ws = new WebSocket('ws://localhost:8000/ws/client1');
 
 ## 消息格式
 
-### 发送消息格式
+### 发送文本消息
 ```json
 {
-    "type": "send",
+    "type": "send_text",
     "receiver": "接收者名称",
     "content": "消息内容"
+}
+```
+
+### 发送收藏内容
+```json
+{
+    "type": "send_favorite",
+    "favorite_name": "收藏内容名称",
+    "friend_name": "接收者名称"
 }
 ```
 
@@ -42,19 +63,26 @@ const ws = new WebSocket('ws://localhost:8000/ws/client1');
 - 端点：`ws://localhost:8000/ws/{client_id}`
 - 参数：`client_id` - 客户端唯一标识符
 
-### 消息发送
-通过WebSocket连接发送JSON格式的消息：
+### 消息发送示例
 ```typescript
+// 发送文本消息
 ws.send(JSON.stringify({
-    type: "send",
+    type: "send_text",
     receiver: "接收者",
     content: "消息内容"
+}));
+
+// 发送收藏内容
+ws.send(JSON.stringify({
+    type: "send_favorite",
+    favorite_name: "收藏内容",
+    friend_name: "接收者"
 }));
 ```
 
 ## 配置说明
 
-服务器配置可在`new.py`中修改：
+服务器配置可在`main.py`中修改：
 ```python
 config = uvicorn.Config(
     self.app,
@@ -70,6 +98,8 @@ config = uvicorn.Config(
 2. 程序需要以管理员权限运行以访问UI自动化接口
 3. 避免在消息处理过程中手动操作微信窗口
 4. 建议在使用前备份重要的微信聊天记录
+5. 新好友欢迎语需要开启免同意添加好友
+6. 收藏转发功能需要确保收藏内容存在且可访问
 
 ## 错误处理
 
@@ -78,22 +108,33 @@ config = uvicorn.Config(
 1. 微信窗口未找到
    - 确保微信已启动并登录
    - 检查程序权限
+   - 检查微信版本兼容性
 
 2. WebSocket连接失败
    - 确认服务器地址和端口是否正确
    - 检查防火墙设置
+   - 检查网络连接状态
 
 3. 消息发送失败
    - 检查接收者名称是否正确
    - 确保微信窗口未被最小化
+   - 检查消息内容是否包含特殊字符
+
+4. 收藏转发失败
+   - 确认收藏内容是否存在
+   - 检查收藏内容名称是否正确
+   - 确保接收者名称准确
 
 ## 开发计划
 
 - [ ] 添加消息历史记录功能
 - [ ] 实现消息队列持久化
-- [ ] 添加更多消息类型支持
+- [ ] 添加更多消息类型支持（图片、文件等）
 - [ ] 优化消息监控性能
 - [ ] 添加用户认证机制
+- [ ] 支持群聊消息处理
+- [ ] 添加消息撤回功能
+- [ ] 支持自定义欢迎语
 
 ## 贡献指南
 
@@ -118,3 +159,7 @@ config = uvicorn.Config(
 - 添加WebSocket服务器
 - 实现任务队列管理
 - 添加消息去重机制
+- 实现新好友欢迎语
+- 添加收藏内容转发功能
+- 优化UI自动化操作
+- 添加详细的日志记录

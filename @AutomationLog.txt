@@ -1,0 +1,1 @@
+2025-03-26 12:13:41.465 send_favorite.py[148] click_favorites_button -> Find Control Timeout(10s): {ControlType: ButtonControl}

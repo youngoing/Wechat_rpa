@@ -7,7 +7,9 @@ import json
 import time
 import fastapi
 from fastapi import WebSocket, WebSocketDisconnect
-
+import os
+import subprocess
+import pyautogui
 
 @dataclass
 class WsSendMsg:
@@ -19,15 +21,52 @@ class WsRecvMsg:
     sender: str
     content: str
 
+@dataclass
+class WsFavoriteMsg:
+    favorite_name: str
+    friend_name: str
+
 class WeChatRPA:
     def __init__(self):
         self.wx_window = None
+        self.welcome_msg = "你好，我是小助手，有什么可以帮你的吗？"
         self.send_queue = asyncio.Queue()  # 发送队列
         self.recv_queue = asyncio.Queue()  # 接收队列
         self.task_queue = asyncio.Queue()  # 任务队列
         self.processing_lock = asyncio.Lock()  # 处理锁
         self.is_processing = False  # 是否正在处理任务
-        self.processed_messages = set()  # 已处理消息的集合，移到类级别
+        self.processed_messages = set()  # 已处理消息的集合
+
+    def human_move_to(self, x, y):
+        """模拟人类移动鼠标"""
+        try:
+            pyautogui.moveTo(x, y, duration=0.3)
+            return True
+        except Exception as e:
+            logging.error(f"移动鼠标时出错: {str(e)}")
+            return False
+
+    async def start_wechat(self):
+        """尝试启动微信"""
+        try:
+            # 微信常见安装路径
+            wechat_paths = [
+                os.path.join(os.environ['ProgramFiles(x86)'], 'Tencent', 'WeChat', 'WeChat.exe'),
+                os.path.join(os.environ['ProgramFiles'], 'Tencent', 'WeChat', 'WeChat.exe'),
+                os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Tencent', 'WeChat', 'WeChat.exe')
+            ]
+            
+            for path in wechat_paths:
+                if os.path.exists(path):
+                    logging.info(f"发现微信路径: {path}")
+                    subprocess.Popen(path)
+                    return True
+            
+            logging.error("未找到微信安装路径，请手动启动微信")
+            return False
+        except Exception as e:
+            logging.error(f"启动微信时出错: {str(e)}")
+            return False
     async def process_task_queue(self):
         """处理任务队列"""
         while True:
@@ -37,7 +76,7 @@ class WeChatRPA:
                 async with self.processing_lock:
                     self.is_processing = True
                     try:
-                        if task['type'] == 'send':
+                        if task['type'] == 'send_text':
                             success = await self.async_send_message(task['msg'])
                             if not success:
                                 logging.error(f"消息发送失败: {task['msg']}")
@@ -46,13 +85,31 @@ class WeChatRPA:
                         elif task['type'] == 'get_messages':
                             # 处理获取消息的任务
                             await self.click_chat(task['chat_name'], task['msg_count'])
+                        elif task['type'] == 'new_friend':
+                            # 处理新好友验证消息
+                            logging.info(f"处理新好友验证消息: {task['chat_name']}")
+                            # 这里可以添加你想要的处理逻辑，比如发送欢迎消息
+                            welcome_msg = WsSendMsg(
+                                receiver=task['chat_name'],
+                                content=self.welcome_msg
+                            )
+                            success = await self.async_send_message(welcome_msg)
+                            if not success:
+                                logging.error(f"发送欢迎消息失败: {task['chat_name']}")
+                        elif task['type'] == 'send_favorite':
+                            logging.info(f"处理发送收藏消息: {task['favorite_name']} -> {task['friend_name']}")
+                            success = await self.find_favorite_and_send_to_friend(task['favorite_name'], task['friend_name'])
+                            if not success:
+                                logging.error(f"发送收藏消息失败: {task['favorite_name']} -> {task['friend_name']}")
+                        else:
+                            logging.error(f"未知任务类型: {task['type']}")
                     finally:
                         self.is_processing = False
                         self.task_queue.task_done()
             except Exception as e:
                 logging.error(f"处理任务出错: {str(e)}")
             await asyncio.sleep(0.1)
-    def find_wechat_window(self)->bool:
+    async def find_wechat_window(self)->bool:
         """查找微信主窗口"""
         try:
             # 使用微信的类名查找
@@ -65,7 +122,7 @@ class WeChatRPA:
             
             # 如果仍未找到，可能微信未启动，尝试启动
             logging.warning("未找到微信窗口，尝试启动微信...")
-            self.start_wechat()
+            await self.start_wechat()
             time.sleep(1)  # 等待微信启动
             
             # 再次尝试查找
@@ -82,7 +139,8 @@ class WeChatRPA:
         except Exception as e:
             logging.error(f"查找微信窗口时出错: {str(e)}")
             return False
-    def search_and_open_chat(self, contact_name):
+
+    async def search_and_open_chat(self, contact_name)->bool:
         """搜索并打开指定联系人的聊天窗口"""
         try:
             # 点击搜索框
@@ -100,9 +158,9 @@ class WeChatRPA:
             
             # 输入联系人名称
             search_box.SendKeys(contact_name)
-            time.sleep(0.5)  # 等待搜索结果
+            time.sleep(0.3)  # 等待搜索结果
             search_box.SendKeys('{Enter}')
-            time.sleep(0.5)
+            time.sleep(0.3)
             return True
             
         except Exception as e:
@@ -113,30 +171,197 @@ class WeChatRPA:
         while True:
             if not self.send_queue.empty():
                 msg = await self.send_queue.get()
-                # 将发送任务加入任务队列
-                await self.task_queue.put({
-                    'type': 'send',
-                    'msg': msg
-                })
-            await asyncio.sleep(0.1)
+                # 根据消息类型将任务加入任务队列
+                if isinstance(msg, WsSendMsg):
+                    await self.task_queue.put({
+                        'type': 'send_text',
+                        'msg': msg
+                    })
+                elif isinstance(msg, WsFavoriteMsg):
+                    await self.task_queue.put({
+                        'type': 'send_favorite',
+                        'favorite_name': msg.favorite_name,
+                        'friend_name': msg.friend_name
+                    })
+            else:
+                await asyncio.sleep(0.1)
+    async def click_button(self, button_name)->bool:
+        """
+        点击微信收藏按钮
+        button_name: 按钮名称(收藏:Favorites, 主页面:Chats,联系人:Contacts,······)
+        return: 是否点击成功
+        """
+        try:
+            # 先确保微信窗口是激活的
+            if self.wx_window and self.wx_window.Exists():
+                self.wx_window.SetActive()
+                time.sleep(0.5)
+                
+                # 方法1: 直接通过名称查找按钮控件
+                favorites_button = self.wx_window.ButtonControl(Name=button_name, searchDepth=5)
+                if favorites_button.Exists():
+                    logging.info("找到Favorites按钮 (方法1)")
+                    favorites_button.Click()
+                    time.sleep(0.5)
+                    return True
+                
+                time.sleep(0.3)
+                pyautogui.click()
+                time.sleep(0.5)
+                return True
+                
+            else:
+                logging.error("微信窗口不存在或未激活")
+                return False
+        except Exception as e:
+            logging.error(f"点击收藏按钮时出错: {str(e)}")
+            return False
     
     async def async_send_message(self, msg: WsSendMsg) -> bool:
         """异步执行发送操作"""
-        loop = asyncio.get_event_loop()
         try:
-            # 将同步操作放入线程池执行
-            return await loop.run_in_executor(
-                None, 
-                lambda: self._sync_send(msg)
-            )
+            # 直接调用异步发送方法
+            return await self._sync_send(msg)
         except Exception as e:
             logging.error(f"异步发送异常: {str(e)}")
             return False
-    
-    def _sync_send(self, msg: WsSendMsg) -> bool:
-        """实际同步发送逻辑（原send_message改进）"""
+    async def find_favorite_and_send_to_friend(self, favorite_name, friend_name):
+        """查找收藏项并直接发送给朋友"""
         try:
-            if not self.search_and_open_chat(msg.receiver):
+            logging.info(f"开始查找收藏项并发送给朋友: {favorite_name} -> {friend_name}")
+            # 先点击收藏按钮打开收藏列表
+            if not await self.click_button("Favorites"):
+                logging.error("无法点击收藏按钮")
+                return False
+            
+            time.sleep(1)  # 等待收藏列表加载
+            
+            # 定义递归向上查找All Favorites列表的函数
+            def find_all_favorites_in_ancestors(control, depth=6):
+                try:
+                    # 先检查当前控件是否是All Favorites列表
+                    if (control.ControlType == auto.ControlType.ListControl and 
+                        control.Name == 'All Favorites' and control.Exists()):
+                        logging.info(f"找到All Favorites列表")
+                        return control
+                    
+                    # 搜索当前控件的子控件
+                    for child in control.GetChildren():
+                        list_control = find_all_favorites_in_ancestors(child, 0)
+                        if list_control:
+                            return list_control
+                    
+                    # 如果当前深度允许，向上递归查找
+                    if depth > 0:
+                        parent = control.GetParentControl()
+                        if parent:
+                            return find_all_favorites_in_ancestors(parent, depth - 1)
+                            
+                except Exception as e:
+                    logging.error(f"在递归查找All Favorites时出错: {str(e)}")
+                return None
+            
+            # 查找收藏列表
+            favorites_list = find_all_favorites_in_ancestors(self.wx_window)
+            favorite_item = None
+            
+            if favorites_list and favorites_list.Exists():
+                logging.info(f"找到All Favorites列表，开始查找收藏项: {favorite_name}")
+                
+                # 查找特定收藏项目
+                list_items = favorites_list.GetChildren()
+                logging.info(f"收藏列表中有{len(list_items)}个项目")
+                
+                for item in list_items:
+                    try:
+                        item_name = item.Name if hasattr(item, 'Name') else '无名称'
+                        
+                        if item.ControlType == auto.ControlType.ListItemControl and favorite_name in item_name:
+                            logging.info(f"找到匹配的收藏项: {item_name}")
+                            favorite_item = item
+                            break
+                    except Exception as e:
+                        logging.error(f"检查列表项时出错: {str(e)}")
+            
+            # 如果找到了收藏项，直接右键点击
+            if favorite_item and favorite_item.Exists():
+                # 获取项目位置
+                rect = favorite_item.BoundingRectangle
+                center_x = (rect.left + rect.right) // 2
+                center_y = (rect.top + rect.bottom) // 2
+                
+                # 移动到项目位置并右键点击
+                self.human_move_to(center_x, center_y)
+                time.sleep(0.3)
+                pyautogui.rightClick()
+                time.sleep(0.5)
+                logging.info(f"已右键点击收藏项: {favorite_item.Name}")
+
+                #向右和向下移动一点，然后左键点击
+                pyautogui.move(10, 10)
+                time.sleep(0.3)
+                pyautogui.click()
+                time.sleep(0.5)
+                logging.info(f"已左键点击转发")
+                time.sleep(0.2)
+
+                
+                # 点击搜索框
+                search_box = self.wx_window.EditControl(Name='Search')
+                if not search_box.Exists():
+                    logging.warning("未找到标准搜索框，尝试找到备选搜索框...")
+                    # 尝试其他可能的搜索框属性
+                    search_box = self.wx_window.EditControl(searchDepth=3)
+                if search_box.Exists():
+                    search_box.Click()
+                    # time.sleep(0.5)
+                    # 清空搜索框
+                    search_box.SendKeys('{Ctrl}a')
+                    # time.sleep(0.2)
+                    search_box.SendKeys('{Delete}')
+                    # time.sleep(0.2)
+
+                    # 输入联系人名称 - 使用SendKeys代替SetValue
+                    search_box.SendKeys(friend_name)
+                    # time.sleep(0.2)  # 增加等待时间
+                    # 判断是否找到联系人
+                    if search_box.Exists():
+                        logging.info(f"成功找到联系人: {friend_name}")
+                        search_box.SendKeys('{Enter}')
+                        time.sleep(1.5)  # 等待搜索结果
+
+                        logging.info("开始查找Send按钮")
+                        send_button = self.wx_window.ButtonControl(Name="Send", searchDepth=6)
+                        if not send_button.Exists():
+                            send_button = self.wx_window.ButtonControl(Name="发送", searchDepth=6)
+                        if send_button and send_button.Exists():
+                            logging.info("直接查找找到Send按钮")
+                            send_button.Click()
+                            time.sleep(0.5)
+                            return True
+                        else:
+                            logging.error("未找到Send按钮")
+                            return False
+                    else:
+                        logging.error(f"未找到联系人: {friend_name}")
+                        return False
+                
+            else:
+                logging.error(f"未找到收藏项: {favorite_name}")
+                return False
+        except Exception as e:
+            import traceback
+            logging.error(f"查找收藏项并发送给好友时出错: {str(e)}")
+            logging.error(f"详细错误信息: {traceback.format_exc()}")
+            return False
+        finally:
+            # 点击主页按钮，返回主页面
+            await self.click_button("Chats")
+    
+    async def _sync_send(self, msg: WsSendMsg) -> bool:
+        """实际发送逻辑"""
+        try:
+            if not await self.search_and_open_chat(msg.receiver):
                 return False
             
             # 优化输入框查找逻辑
@@ -163,6 +388,83 @@ class WeChatRPA:
                 for item in chat_list.GetChildren():
                     if item.ControlType == auto.ControlType.ListItemControl:
                         chat_name = item.Name
+                        
+                        # 获取当前会话项的所有面板文本
+                        def get_item_pane_texts(control, depth=5):
+                            texts = []
+                            try:
+                                # 如果深度为0，直接返回
+                                if depth <= 0:
+                                    logging.debug(f"达到最大搜索深度: {depth}")
+                                    return texts
+                                
+                                # 记录当前控件的类型和名称
+                                logging.debug(f"当前控件类型: {control.ControlType}, 名称: {control.Name}")
+                                
+                                # 获取当前控件下的所有子控件
+                                text_controls = control.GetChildren()
+                                logging.debug(f"找到 {len(text_controls)} 个子控件")
+                                
+                                for child in text_controls:
+                                    # 记录每个子控件的类型和名称
+                                    logging.debug(f"子控件类型: {child.ControlType}, 名称: {child.Name}")
+                                    
+                                    # 检查子控件的Name属性
+                                    if child.Name:
+                                        texts.append(child.Name)
+                                        logging.debug(f"找到控件Name: {child.Name}")
+                                        if any(f"以上是打招呼的内容" in text for text in texts):
+                                            logging.debug("找到目标文本，提前返回")
+                                            return texts
+                                    
+                                    # 检查子控件是否是TextControl
+                                    if child.ControlType == auto.ControlType.TextControl:
+                                        text = child.GetWindowText()
+                                        if text:
+                                            texts.append(text)
+                                            logging.debug(f"找到TextControl文本: {text}")
+                                            if any(f"以上是打招呼的内容" in text for text in texts):
+                                                logging.debug("找到目标文本，提前返回")
+                                                return texts
+                                        else:
+                                            logging.debug("TextControl没有文本内容")
+                                    
+                                    # 如果子控件是PaneControl，递归搜索其下的TextControl
+                                    if child.ControlType == auto.ControlType.PaneControl:
+                                        logging.debug(f"发现PaneControl，开始递归搜索，当前深度: {depth}")
+                                        pane_texts = get_item_pane_texts(child, depth - 1)
+                                        if pane_texts:
+                                            texts.extend(pane_texts)
+                                            logging.debug(f"从PaneControl中找到文本: {pane_texts}")
+                                            if any(f"以上是打招呼的内容" in text for text in texts):
+                                                logging.debug("找到目标文本，提前返回")
+                                                return texts
+                                        else:
+                                            logging.debug("PaneControl中没有找到文本")
+                                            
+                            except Exception as e:
+                                logging.error(f"收集文本时出错: {str(e)}", exc_info=True)
+                            return texts
+                        
+                        # 获取当前会话项的面板文本
+                        item_texts = get_item_pane_texts(item)
+                        logging.debug(f"会话 {chat_name} 的面板文本: {item_texts}")
+                        
+                        # 检查是否是新好友验证消息
+                        expected_text = f"你已添加了{chat_name}，现在可以开始聊天了"
+                        if any(expected_text in text for text in item_texts):
+                            # 不回复名称为空的好友
+                            if chat_name.strip() == "":
+                                logging.warning(f"检测到新好友验证消息: {chat_name}，但名称为空，跳过")
+                                continue
+                            logging.info(f"检测到新好友验证消息: {chat_name}")
+                            await self.task_queue.put({
+                                'type': 'new_friend',
+                                'chat_name': chat_name
+                            })
+                            continue
+                        
+                        # 原有的新消息检测逻辑
                         import re
                         match = re.search(r'^(.*?)(\d+)条新消息$', chat_name)
                         if match:
@@ -170,7 +472,6 @@ class WeChatRPA:
                             msg_count = int(match.group(2))
                             new_messages[original_name] = msg_count
                             logging.info(f"会话: {original_name} 有 {msg_count} 条新消息")
-                            # 将获取消息的任务加入队列
                             await self.task_queue.put({
                                 'type': 'get_messages',
                                 'chat_name': original_name,
@@ -290,7 +591,7 @@ class WeChatRPA:
             await self.task_queue.put({
                 'type': 'monitor'
             })
-            await asyncio.sleep(2)  # 每2秒检查一次
+            await asyncio.sleep(5)  # 每2秒检查一次
 
 class WsServer:
     def __init__(self, rpa: WeChatRPA):
@@ -312,12 +613,20 @@ class WsServer:
         """处理接收到的消息"""
         try:
             msg_data = json.loads(data)
-            if msg_data.get("type") == "send":
+            if msg_data.get("type") == "send_text":
                 msg = WsSendMsg(
                     receiver=msg_data["receiver"],
                     content=msg_data["content"]
                 )
                 await self.rpa.send_queue.put(msg)
+            elif msg_data.get("type") == "send_favorite":
+                msg = WsFavoriteMsg(
+                    favorite_name=msg_data["favorite_name"],
+                    friend_name=msg_data["friend_name"]
+                )
+                await self.rpa.send_queue.put(msg)
+            else:
+                logging.error(f"ws接受到未知消息类型: {msg_data.get('type')}")
         except Exception as e:
             logging.error(f"消息处理错误: {str(e)}")
     
@@ -389,13 +698,15 @@ class ConnectionManager:
 async def main():
     # 初始化RPA
     wechat_rpa = WeChatRPA()
-    if not wechat_rpa.find_wechat_window():
+    if not await wechat_rpa.find_wechat_window():
         logging.error("微信窗口初始化失败")
         return
     
     # 初始化WebSocket服务
     ws_server = WsServer(wechat_rpa)
-    
+
+    # 保证刚开始微信处于主页面
+    await wechat_rpa.click_button("Chats")
     # 创建任务列表
     tasks = [
         asyncio.create_task(wechat_rpa.process_task_queue()),  # 处理任务队列
@@ -418,4 +729,6 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
+    # 设置uiautomation的日志级别为WARNING，过滤掉其调试信息
+    logging.getLogger('uiautomation').setLevel(logging.WARNING)
     asyncio.run(main())

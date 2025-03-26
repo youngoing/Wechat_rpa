@@ -1,0 +1,70 @@
+How found:	ShowContextMenu...
+Name:	"Desktop 1"
+ControlType:	UIA_PaneControlTypeId (0xC371)
+LocalizedControlType:	"pane"
+BoundingRectangle:	{l:0 t:0 r:3840 b:2160}
+IsEnabled:	true
+IsOffscreen:	false
+IsKeyboardFocusable:	true
+HasKeyboardFocus:	false
+ProcessId:	1296
+RuntimeId:	[2A.10010]
+FrameworkId:	"Win32"
+ClassName:	"#32769"
+NativeWindowHandle:	0x10010
+ProviderDescription:	"[pid:11584,providerId:0x10010 Annotation(parent link):Microsoft: Annotation Proxy (unmanaged:uiautomationcore.dll); Main:Microsoft: MSAA Proxy (unmanaged:uiautomationcore.dll); Hwnd:Microsoft: HWND Proxy (unmanaged:uiautomationcore.dll)]"
+IsPassword:	false
+IsDialog:	false
+LegacyIAccessible.ChildId:	0
+LegacyIAccessible.Name:	"Desktop 1"
+LegacyIAccessible.Role:	client (0xA)
+LegacyIAccessible.State:	focusable (0x100000)
+IsAnnotationPatternAvailable:	false
+IsDragPatternAvailable:	false
+IsDockPatternAvailable:	false
+IsDropTargetPatternAvailable:	false
+IsExpandCollapsePatternAvailable:	false
+IsGridItemPatternAvailable:	false
+IsGridPatternAvailable:	false
+IsInvokePatternAvailable:	false
+IsItemContainerPatternAvailable:	false
+IsLegacyIAccessiblePatternAvailable:	true
+IsMultipleViewPatternAvailable:	false
+IsObjectModelPatternAvailable:	false
+IsRangeValuePatternAvailable:	false
+IsScrollItemPatternAvailable:	false
+IsScrollPatternAvailable:	false
+IsSelectionItemPatternAvailable:	false
+IsSelectionPatternAvailable:	false
+IsSpreadsheetItemPatternAvailable:	false
+IsSpreadsheetPatternAvailable:	false
+IsStylesPatternAvailable:	false
+IsSynchronizedInputPatternAvailable:	false
+IsTableItemPatternAvailable:	false
+IsTablePatternAvailable:	false
+IsTextChildPatternAvailable:	false
+IsTextEditPatternAvailable:	false
+IsTextPatternAvailable:	false
+IsTextPattern2Available:	false
+IsTogglePatternAvailable:	false
+IsTransformPatternAvailable:	false
+IsTransform2PatternAvailable:	false
+IsValuePatternAvailable:	false
+IsVirtualizedItemPatternAvailable:	false
+IsWindowPatternAvailable:	false
+IsCustomNavigationPatternAvailable:	false
+IsSelectionPattern2Available:	false
+FirstChild:	"Inspect  (HWND: 0x000A09DA)" window
+LastChild:	"Program Manager" pane
+Next:	[null]
+Previous:	[null]
+Other Props:	Object has no additional properties
+Children:	"Inspect  (HWND: 0x000A09DA)" window
+	"Taskbar" pane
+	"Weixin" window
+	"rpa - File Explorer" window
+	"Clash for Windows" pane
+	"send_favorite.py - rpa - Cursor [Administrator]" pane
+	"Pane vs Window - Poe - Google Chrome" window
+	"Program Manager" pane
+Ancestors:	[ No Parent ]
